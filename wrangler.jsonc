@@ -1,0 +1,62 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "receipt-extractor",
+	"main": "src/index.ts",
+	"compatibility_date": "2025-05-09",
+	"observability": {
+		"enabled": true
+	},
+	/**
+	 * Smart Placement
+	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
+	 */
+	"placement": { "mode": "smart" },
+
+	/**
+	 * Environment Variables
+	 * Define environment variables here. Use secrets for sensitive data such as API keys.
+	 * https://developers.cloudflare.com/workers/wrangler/configuration/#environment-variables
+	 */
+	"vars": {
+		"SERVICE_NAME": "receipt-extractor",
+		"GEMINI_MODEL": "gemini-2.0-flash",
+		"GEMINI_TEMPERATURE": "0.1",
+		"GEMINI_MAX_OUTPUT_TOKENS": "800",
+		"USE_SCHEMA": "true"
+	},
+
+	/**
+	 * Production environment configuration
+	 */
+	"env": {
+		"production": {
+			"vars": {
+				"SERVICE_NAME": "receipt-extractor-production",
+				"GEMINI_MODEL": "gemini-2.0-flash",
+				"USE_SCHEMA": "true"
+			}
+		},
+		"development": {
+			"vars": {
+				"SERVICE_NAME": "receipt-extractor-development",
+				"USE_SCHEMA": "false"
+			}
+		}
+	}
+
+	/**
+	 * Note: Use secrets to store sensitive data like API keys.
+	 * https://developers.cloudflare.com/workers/configuration/secrets/
+	 *
+	 * Add the required secrets with:
+	 * wrangler secret put GEMINI_API_KEY
+	 * wrangler secret put API_KEY
+	 *
+	 * You can also set a custom prompt template:
+	 * wrangler secret put PROMPT_TEMPLATE
+	 */
+}
