@@ -37,14 +37,14 @@ const DEFAULT_SCHEMA = {
           "price": {
             "type": "number"
           },
-          "count": {
+          "quantity": {
             "type": "integer"
           }
         },
         "required": [
           "name",
           "price",
-          "count"
+          "quantity"
         ]
       }
     },
@@ -236,7 +236,7 @@ const SCHEMA_PROMPT_TEMPLATE = `Extract the following information from this rece
 3. "items": An array of purchased items, where each item has:
    - "name": Item description (string)
    - "price": Individual item price (number, not string)
-   - "count": Quantity of this item (integer)
+   - "quantity": Quantity of this item (integer)
 4. "sub_total": The subtotal before tax, VAT or service charges (number)
 5. "vat": The VAT or tax amount (number)
 6. "service_charge": Any service charges or tips (number, use 0 if none)
@@ -256,7 +256,7 @@ The response MUST follow this exact JSON structure:
     {
       "name": string,
       "price": number,
-      "count": integer
+      "quantity": integer
     }
   ],
   "sub_total": number,
@@ -412,7 +412,7 @@ function validateAndCleanResponseForSchema(data: any): any {
       return {
         name: item.name || item.description || "",
         price: ensureNumber(item.price || item.unit_price || 0),
-        count: ensureInteger(item.count || item.quantity || 1)
+        quantity: ensureInteger(item.quantity || item.count || 1)
       };
     });
   }
