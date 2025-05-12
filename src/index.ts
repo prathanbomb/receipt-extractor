@@ -18,6 +18,10 @@ export interface Env {
   PROMPT_TEMPLATE?: string;
   // Flag to use structured schema or not
   USE_SCHEMA?: string;
+  // Optional location for the API request
+  GEMINI_LOCATION?: string;
+  // Optional project ID for Vertex AI
+  GEMINI_PROJECT_ID?: string;
 }
 
 /**
@@ -273,6 +277,8 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
   const modelName = env.GEMINI_MODEL || 'gemini-pro-vision';
   const temperature = parseFloat(env.GEMINI_TEMPERATURE || '0.1');
   const maxOutputTokens = parseInt(env.GEMINI_MAX_OUTPUT_TOKENS || '800', 10);
+  const location = env.GEMINI_LOCATION || 'us-central1';
+  const projectId = env.GEMINI_PROJECT_ID || 'your-project-id';
 
   // Choose the appropriate prompt template based on useSchema flag
   let promptTemplate;
@@ -286,7 +292,10 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
   const base64Image = arrayBufferToBase64(imageData);
 
   // Create the request to Gemini API
-  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+  // If location is specified, use Vertex AI endpoint, otherwise use Gemini API
+  const apiUrl = env.GEMINI_LOCATION
+    ? `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${modelName}:generateContent`
+    : `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
 
   const requestData: any = {
     contents: [
@@ -312,7 +321,7 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
     }
   };
 
-  // If using schema, add schema parameter for structured output if the model supports it
+  // If using schema and the model supports function calling, add schema parameters
   if (useSchema && modelName.includes('gemini-1.5')) {
     requestData.tools = [{
       functionDeclarations: [{
@@ -332,28 +341,41 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
     };
   }
 
-  // Send request to Gemini API
-  const response = await fetch(`${apiUrl}?key=${env.GEMINI_API_KEY}`, {
+  // Set up authorization based on whether we're using Vertex AI or Gemini API
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  let url = apiUrl;
+
+  // If using Gemini API directly, append API key as query parameter
+  if (!env.GEMINI_LOCATION) {
+    url = `${apiUrl}?key=${env.GEMINI_API_KEY}`;
+  } else {
+    // For Vertex AI, add the API key as a header
+    headers['Authorization'] = `Bearer ${env.GEMINI_API_KEY}`;
+  }
+
+  // Send request to the API
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
+    headers,
     body: JSON.stringify(requestData)
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+    throw new Error(`API error (${response.status}): ${errorText}`);
   }
 
-  const geminiResponse = await response.json();
+  const apiResponse = await response.json();
 
-  // Extract and parse the JSON from Gemini's response
+  // Extract and parse the JSON from the response
   let extractedData;
 
   try {
     // Check for function calls first (for structured schema with Gemini 1.5+)
-    const functionCall = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.functionCall;
+    const functionCall = apiResponse.candidates?.[0]?.content?.parts?.[0]?.functionCall;
 
     if (functionCall && functionCall.name === 'extract_receipt_data') {
       // Parse the function arguments as JSON
@@ -361,10 +383,10 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
     }
 
     // Traditional response handling
-    const responseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    const responseText = apiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!responseText) {
-      throw new Error('Unexpected Gemini API response format');
+      throw new Error('Unexpected API response format');
     }
 
     // Try to parse JSON from the text response
@@ -383,8 +405,8 @@ async function extractReceiptDataWithGemini(imageData: ArrayBuffer, env: Env, us
   } catch (error) {
     // If parsing fails, return the raw text
     extractedData = {
-      raw_text: geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || 'No text found in response',
-      error: 'Failed to parse JSON from Gemini response'
+      raw_text: apiResponse.candidates?.[0]?.content?.parts?.[0]?.text || 'No text found in response',
+      error: 'Failed to parse JSON from API response'
     };
   }
 
